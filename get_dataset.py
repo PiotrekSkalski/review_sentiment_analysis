@@ -6,6 +6,7 @@ from functools import partial
 import torch
 import torchtext.data as data
 import torchtext.vocab as vocab
+import logging
 
 
 def find_unknown(x, word_list):
@@ -16,6 +17,7 @@ def find_unknown(x, word_list):
 
 
 def get_dataset():
+    logging.info('Downloading data')
     if not os.path.exists('data'):
         os.makedirs('data')
     if not os.listdir('data'):
@@ -36,7 +38,8 @@ def get_dataset():
     TEXT = data.Field(tokenize='spacy', lower=True, batch_first=True)
     LABEL = data.Field(sequential=False, use_vocab=False)
     fields = [('review', TEXT), ('label', LABEL)]
-
+    
+    logging.info('Downloading GloVe word vectors')
     GLOVE = vocab.GloVe(name='6B', dim=300)
     pipe = data.Pipeline(partial(find_unknown, word_list=list(GLOVE.stoi.keys())))
     TEXT.preprocessing = pipe

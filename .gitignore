@@ -1,2 +1,7 @@
 model_baseline.pt
 model_baseline_fine.pt
+.ipynb_checkpoints/
+__pycache__/
+data/
+.vector_cache/
+log.txt
