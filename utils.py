@@ -14,6 +14,10 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 def validate(ds, loss_fn, model, bs=1, device=device):
+    """
+        Loops over a dataset (validation or test) and evaluates average
+        loss and accuracy of a given model.
+    """
     is_in_train = model.training
     model.eval()
     with torch.no_grad():
@@ -34,6 +38,11 @@ def validate(ds, loss_fn, model, bs=1, device=device):
 
 
 def lr_finder(model, dataset, optimiser, loss_fn, lr_range=[1e-6, 1e0], bs=1, avg_over_batches=200, device=device):
+    """
+        A utility that helps find a good learning rate. It gradually increases the learning rate
+        every 'avg_over_batches' batches and records how the loss evolves. Usually one sees a
+        decrease in loss at some point, plateauing, and then increase once the lr is too big.
+    """
     lr_list = np.logspace(np.log10(lr_range[0]),
                           np.log10(lr_range[1]),
                          np.int(np.log10(lr_range[1]/lr_range[0])*10))
