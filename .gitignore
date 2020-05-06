@@ -5,3 +5,5 @@ __pycache__/
 data/
 .vector_cache/
 log.txt
+gru_experimenting.ipynb
+models/
