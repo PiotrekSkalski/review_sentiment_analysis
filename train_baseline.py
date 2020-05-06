@@ -13,7 +13,7 @@ from importlib import reload
 import logging
 logging.basicConfig(filename='log.txt',
                     level=logging.INFO,
-                    format='%(asctime)s %(levelname)s : %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
+                    format='%(asctime)s %(levelname)s : %(message)s', datefmt='%m/%d/%Y %H:%M:%S')
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
