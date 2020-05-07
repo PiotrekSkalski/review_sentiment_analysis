@@ -2,8 +2,8 @@ import copy
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from torchtext.data import BucketIterator
 import torch
+import torchtext.data as data
 from torch.nn.utils import clip_grad_value_
 import time
 import logging
@@ -12,6 +12,24 @@ import logging
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+class MyIterator(data.Iterator):
+    def create_batches(self):
+        if self.train:
+            def pool(d, random_shuffler):
+                for p in data.batch(d, self.batch_size * 50):
+                    p_batch = data.batch(
+                        sorted(p, key=self.sort_key),
+                        self.batch_size, self.batch_size_fn)
+                    for b in random_shuffler(list(p_batch)):
+                        yield b
+            self.batches = pool(self.data(), self.random_shuffler)
+            
+        else:
+            self.batches = []
+            for b in data.batch(self.data(), self.batch_size,
+                                          self.batch_size_fn):
+                self.batches.append(sorted(b, key=self.sort_key))
+                
 
 def validate(ds, loss_fn, model, bs=1, device=device):
     """
@@ -21,13 +39,13 @@ def validate(ds, loss_fn, model, bs=1, device=device):
     is_in_train = model.training
     model.eval()
     with torch.no_grad():
-#         size = len(ds)
         predictions = []
-        gt = list(ds.label)
+        gt = []
         loss = 0
-        for i, batch in enumerate(BucketIterator(ds, bs, sort_key=lambda x: len(x.review), shuffle=False, device=device)):
+        for i, batch in enumerate(MyIterator(ds, bs, sort_key=lambda x: len(x.review), shuffle=False, train=False, device=device)):
             output = model(batch.review)
             predictions.extend(output.argmax(dim=1).tolist())
+            gt.extend(batch.label.tolist())
             loss += loss_fn(output, batch.label).item()
         avg_loss = loss/(i+1)
 
@@ -53,7 +71,7 @@ def lr_finder(model, dataset, optimiser, loss_fn, lr_range=[1e-6, 1e0], bs=1, av
         param_group['lr'] = lr_list[0]
     
     tot_batches_todo = len(lr_list)*avg_over_batches
-    for i, batch in enumerate(BucketIterator(dataset, bs, sort_key=lambda x: len(x.review), shuffle=True, device=device, repeat=True), 1):
+    for i, batch in enumerate(MyIterator(dataset, bs, sort_key=lambda x: len(x.review), shuffle=True, device=device, repeat=True), 1):
         optimiser.zero_grad()
 
         output = model(batch.review)
@@ -101,8 +119,8 @@ def learner(model, loss_fn, optimiser, ds_train, ds_val=None, epochs=1, bs=4, de
     for epoch in range(epochs):
         
         total_loss = 0
-        for i, batch in enumerate(BucketIterator(ds_train, bs, sort_key=lambda x: len(x.review),
-                                                 shuffle=True, device=device), 1):
+        for i, batch in enumerate(MyIterator(ds_train, bs, sort_key=lambda x: len(x.review),
+                                             shuffle=True, device=device), 1):
             optimiser.zero_grad()
             
             output = model(batch.review)

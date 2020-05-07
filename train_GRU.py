@@ -6,7 +6,6 @@ import os
 import torch
 import torch.nn as nn
 from torch.optim import Adam
-from torchtext.data import BucketIterator
 import math
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

@@ -6,7 +6,6 @@ import os
 import torch
 import torch.nn as nn
 from torch.optim import Adam
-from torchtext.data import Iterator
 from importlib import reload
 
 # Setup logger
