@@ -52,7 +52,7 @@ class Baseline_model(nn.Module):
     batch_concat = torch.cat([review[:length] for review, length in zip(batch, lengths)], dim=0)
     offsets = torch.cat([torch.tensor([0]), torch.cumsum(lengths[:-1], dim=0)])
     
-    out = self.embedding(batch_concat, offsets)
+    out = self.embedding(batch_concat, offsets) # (B x E)
     return self.head(out)
 
 

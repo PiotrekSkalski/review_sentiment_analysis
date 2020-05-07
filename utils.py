@@ -13,6 +13,13 @@ import logging
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 class MyIterator(data.Iterator):
+    """
+        Custom iterator that tries to make batches with examples of
+        similar length. First, it randomly splits into chunks of
+        50*batch_size examples. Then sorts within each chunk and
+        builds batches from these sorted examples. It then shuffles
+        the batches and yields them.
+    """
     def create_batches(self):
         if self.train:
             def pool(d, random_shuffler):

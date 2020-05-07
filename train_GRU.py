@@ -66,15 +66,16 @@ class GRU_SelfAttention_model(nn.Module):
         batch, lengths = batch
         batch_dim, _ = batch.shape
         
-        embedded = self.dropout(self.embedding(batch))
+        embedded = self.dropout(self.embedding(batch)) # (B x E)
         embedded_packed = nn.utils.rnn.pack_padded_sequence(embedded, lengths, batch_first=True, enforce_sorted=False)
         
         outputs_packed, hiddens = self.gru(embedded_packed)
-        
         outputs, lengths = nn.utils.rnn.pad_packed_sequence(outputs_packed, batch_first=True)
+        # outputs : (B x L x H)
+        # hiddens : (L x B x H)
 
-        attn_weights = self.attention(self.dropout(outputs))
-        attn_output = torch.bmm(attn_weights, outputs).view(batch_dim, -1)
+        attn_weights = self.attention(self.dropout(outputs)) # (B x A x L)
+        attn_output = torch.bmm(attn_weights, outputs).view(batch_dim, -1) # (B x A x L) x (B x L x H) -> (B x A x H) -> (B x A*H)
         
         logging.debug('batch shape : {}'.format(batch.shape))
         logging.debug('embedding shape : {}'.format(embedded.shape))
@@ -141,17 +142,19 @@ class GRUmodel(nn.Module):
         batch, lengths = batch
         batch_dim, _ = batch.shape
         
-        embedded = self.dropout(self.embedding(batch))
+        embedded = self.dropout(self.embedding(batch)) # (B x E)
         embedded_packed = nn.utils.rnn.pack_padded_sequence(embedded, lengths, batch_first=True, enforce_sorted=False)
         
         outputs_packed, hiddens = self.gru(embedded_packed)
         outputs, lengths = nn.utils.rnn.pad_packed_sequence(outputs_packed, batch_first=True)
+        # outputs : (B x L x H)
+        # hiddens : (L x B x H)
         
         last_hidden = hiddens.view(self.num_layers, self.num_directions, batch_dim, self.hidden_size)[-1,:,:,:]
-        hidden_concat = last_hidden.transpose(1,0).reshape(batch_dim, self.num_directions*self.hidden_size)
+        hidden_concat = last_hidden.transpose(1,0).reshape(batch_dim, self.num_directions*self.hidden_size) # (B x H)
         
-        avg_pool = torch.sum(outputs, dim=1)/lengths.unsqueeze(1)
-        max_pool = torch.cat([sample[:length].max(dim=0)[0].unsqueeze(0) for sample, length in zip(outputs, lengths)], dim=0)
+        avg_pool = torch.sum(outputs, dim=1)/lengths.unsqueeze(1) # (B x H)
+        max_pool = torch.cat([sample[:length].max(dim=0)[0].unsqueeze(0) for sample, length in zip(outputs, lengths)], dim=0) # (B x H)
         
         logging.debug('batch shape : {}'.format(batch.shape))
         logging.debug('embedding shape : {}'.format(embedded.shape))
