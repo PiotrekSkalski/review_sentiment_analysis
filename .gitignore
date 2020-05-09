@@ -7,3 +7,4 @@ data/
 log.txt
 gru_experimenting.ipynb
 models/
+.vscode/settings.json

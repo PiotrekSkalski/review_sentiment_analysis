@@ -1,0 +1,13 @@
+-----CROSS-VALIDATION-----
+--- baseline model ---
+05/09/2020 19:09:35 INFO : Training loss: 0.1218, accuracy : 0.968
+05/09/2020 19:09:35 INFO : Validation loss: 0.3520, accuracy : 0.857
+--- GRU with concat pooling head ---
+05/09/2020 19:57:50 INFO : Training loss: 0.1480, accuracy : 0.951
+05/09/2020 19:57:50 INFO : Validation loss: 0.3198, accuracy : 0.878
+--- GRU with self attention head ---
+05/09/2020 21:01:35 INFO : Training loss: 0.1226, accuracy : 0.959
+05/09/2020 21:01:35 INFO : Validation loss: 0.3243, accuracy : 0.886
+--- CNN model ___
+05/09/2020 21:16:39 INFO : Training loss: 0.2641, accuracy : 0.912
+05/09/2020 21:16:39 INFO : Validation loss: 0.3197, accuracy : 0.879
