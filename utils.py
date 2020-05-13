@@ -96,7 +96,7 @@ def lr_finder(model, dataset, optimiser, loss_fn, lr_range=[1e-6, 1e0],
         loss.backward()
         optimiser.step()
 
-        logging.info('Finding learning rate ...{:.0f}%\r'
+        print('Finding learning rate ...{:.0f}%\r'
                      .format(i/tot_batches_todo*100), end='')
 
         if i == 1:
@@ -115,7 +115,7 @@ def lr_finder(model, dataset, optimiser, loss_fn, lr_range=[1e-6, 1e0],
 
 
 def learner(model, loss_fn, optimiser, ds_train, ds_val=None, epochs=1,
-            bs=4, device=device, grad_clip=None):
+            bs=4, scheduler_fn=None, device=device, grad_clip=None):
     """
         A basic training loop that logs some training statistics,
         like losses and accuracy.
@@ -128,6 +128,9 @@ def learner(model, loss_fn, optimiser, ds_train, ds_val=None, epochs=1,
             ds_val - torchtext.data.Dataset used for validation, default=None.
             epochs - int; default=1.
             bs - int; batch_size, default=4.
+            scheduler_fn - a function that takes optimiser as an argument and
+                        returns a scheduler. It is run at the beginnign of
+                        each epoch (use partial with standard schedulers)
             device - torch.device;
             grad_clip - float; maximum value for a gradient clipping method,
                         default=none, i.e. no grad clipping.
@@ -136,6 +139,8 @@ def learner(model, loss_fn, optimiser, ds_train, ds_val=None, epochs=1,
     start_time = time.time()
     for epoch in range(epochs):
 
+        if scheduler_fn is not None:
+            scheduler = scheduler_fn(optimiser)
         total_loss = 0
         for i, batch in enumerate(MyIterator(ds_train, bs, sort_key=lambda x: len(x.review),
                                              shuffle=True, device=device), 1):
@@ -149,6 +154,8 @@ def learner(model, loss_fn, optimiser, ds_train, ds_val=None, epochs=1,
             if grad_clip is not None:
                 clip_grad_value_(model.parameters(), grad_clip)
             optimiser.step()
+            if scheduler_fn is not None:
+                scheduler.step()
 
             # Logs statistics 3 times during an epoch
             if not i % (len(ds_train)//(bs*3)):
