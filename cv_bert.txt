@@ -1,2 +1,3 @@
+----- Pretrained BERT model -----
 05/11/2020 18:49:49 INFO : Training loss: 0.0391, accuracy : 0.991
 05/11/2020 18:49:49 INFO : Validation loss: 0.2186, accuracy : 0.942

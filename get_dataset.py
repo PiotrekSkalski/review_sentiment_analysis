@@ -6,6 +6,7 @@ from functools import partial
 import torch
 import torchtext.data as data
 import torchtext.vocab as vocab
+from transformers import BertTokenizer, BertModel
 import logging
 
 
@@ -76,5 +77,54 @@ def get_dataset(glove_embedding_name='6B', dim=300):
     TEXT.vocab.vectors[0] = torch.normal(mean=TEXT.vocab.vectors.mean()*torch.ones(1, dim),  # <unk> token
                                          std=TEXT.vocab.vectors.std()*torch.ones(1, dim))
     TEXT.vocab.vectors[1] = torch.zeros(1, dim)  # <pad> token
+
+    return dataset, TEXT.vocab.vectors
+
+
+def get_dataset_bert():
+    logging.info('Downloading data')
+    if not os.path.exists('data'):
+        os.makedirs('data')
+    if not os.listdir('data'):
+        wget.download('https://archive.ics.uci.edu/ml/machine-learning-databases/00331/sentiment labelled sentences.zip', out='data/data.zip')
+        with zipfile.ZipFile('data/data.zip', 'r') as myzip:
+            myzip.extractall('data/')
+
+    # separate lines into reviews and class labels
+    path = os.path.abspath('data/sentiment labelled sentences')
+    regex = re.compile(r'^(.*?)\s+(\d)$')
+    reviews = []
+    for file in ['imdb_labelled.txt', 'amazon_cells_labelled.txt', 'yelp_labelled.txt']:
+        with open(os.path.join(path, file)) as f:
+            for line in f:
+                result = regex.match(line)
+                reviews.append([result.group(1), int(result.group(2))])
+
+    tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True)
+    TEXT = data.Field(tokenize=tokenizer.tokenize, lower=True, batch_first=True)
+    LABEL = data.Field(sequential=False, use_vocab=False)
+    fields = [('review', TEXT), ('label', LABEL)]
+
+    logging.info('Downloading BERT word vectors')
+
+    # pipeline for replacing words that do not appear in GloVe vocab
+    pipe = data.Pipeline(partial(replace_unknown, word_list=list(tokenizer.vocab.keys())))
+    TEXT.preprocessing = pipe
+
+    examples = [data.Example.fromlist(review, fields) for review in reviews]
+    dataset = data.Dataset(examples, fields)
+
+    model = BertModel.from_pretrained('bert-base-uncased')
+    emb_vecs = model.get_input_embeddings().weight
+    dim = emb_vecs.shape[1]
+
+    TEXT.build_vocab(dataset)
+    vectors = [torch.normal(mean=torch.ones(1, dim), std=torch.ones(1, dim)),
+               torch.zeros(1, dim)]
+    
+    for word in TEXT.vocab.itos[2:]:
+        word_id = tokenizer.vocab[word]
+        vectors.append(emb_vecs[word_id].unsqueeze(0))
+    TEXT.vocab.vectors = torch.cat(vectors, dim=0)
 
     return dataset, TEXT.vocab.vectors
