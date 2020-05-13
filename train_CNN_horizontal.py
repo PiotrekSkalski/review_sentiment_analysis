@@ -2,18 +2,12 @@ import logging
 import argparse
 import random
 import os
-import wget
-import zipfile
-import re
 from functools import partial
 import torch
 import torch.nn as nn
-import torchtext.data as data
-import torchtext.vocab as vocab
 from torch.optim import Adam
 from torch.optim.lr_scheduler import OneCycleLR
 from utils import learner, validate, cross_validate
-from transformers import BertTokenizer, BertModel
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -92,6 +86,9 @@ def main():
                         type=int,
                         default=10,
                         help='number of folds, default=10')
+    parser.add_argument('-e', '--embedding',
+                        default='glove',
+                        help="embedding type; either 'glove' or 'bert'." )
     args = parser.parse_args()
 
     # get dataset

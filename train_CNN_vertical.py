@@ -93,7 +93,7 @@ def main():
                         default=10,
                         help='number of folds, default=10.')
     parser.add_argument('-e', '--embedding',
-                        default='glove'
+                        default='glove',
                         help="embedding type; either 'glove' or 'bert'." )
     args = parser.parse_args()
 
