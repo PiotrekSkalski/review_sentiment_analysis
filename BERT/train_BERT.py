@@ -1,4 +1,9 @@
 import os
+import sys
+path = os.path.dirname(os.path.abspath(__file__)) + '/../'
+os.chdir(path)
+sys.path.append(path)
+
 import wget
 import zipfile
 import re

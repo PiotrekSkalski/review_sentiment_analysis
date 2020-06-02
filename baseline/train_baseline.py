@@ -1,12 +1,18 @@
 import os
+import sys
+path = os.path.dirname(os.path.abspath(__file__)) + '/../'
+os.chdir(path)
+sys.path.append(path)
+
 import logging
 import argparse
 import random
 import torch
 import torch.nn as nn
-from torch.optim import Adam
-from utils import validate, learner, get_fold_data, cross_validate
-from get_dataset import get_dataset
+from torch.optim import AdamW
+from utils import cross_validate, validate, get_dataset
+from learner import Learner
+from schedulers import CyclicLRDecay
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -42,15 +48,17 @@ class Baseline_model(nn.Module):
 
 
 def training(model, loss_fn, ds_train, ds_val):
-    optimiser = Adam(model.parameters(), lr=2e-4)
-    logging.info('Training, lr=2e-4')
-    learner(model, loss_fn, optimiser, ds_train, ds_val, epochs=10, bs=8)
+    optimiser = AdamW(model.parameters(), weight_decay=1e-2)
+    steps_per_cycle = 2*(len(ds_train)//32 + 1)
+    scheduler = CyclicLRDecay(optimiser, 1e-4, 1e-2, steps_per_cycle, 0.25, gamma_factor=0.65)
+    learner = Learner(model, loss_fn, optimiser, scheduler, ds_train, ds_val, device)
+
+    logging.info('Training')
+    learner.train(epochs=10, bs=32, grad_clip=(0.2, 0.7))
 
     logging.info('Unfreezing the embedding layer')
     model.embedding.weight.requires_grad_(True)
-    optimiser.param_groups[0]['lr'] = 1e-4
-    logging.info('Training, lr=1e-4')
-    learner(model, loss_fn, optimiser, ds_train, ds_val, epochs=10, bs=8)
+    learner.train(epochs=8, bs=32, grad_clip=(0.2, 0.7))
 
 
 def main():
@@ -89,13 +97,10 @@ def main():
     model = Baseline_model(emb_weights.clone()).to(device)
     loss_fn = nn.CrossEntropyLoss().to(device)
 
-    # cross validation routine
-    if args.crossvalidate:
-        cross_validate(dataset, model, loss_fn, training, args.k, args.randomseed)
-    # single split routine
-    else:
-        ds_train, ds_val = dataset.split(split_ratio=[0.9, 0.1],
-                                         random_state=random.getstate())
+    if args.crossvalidate:  # cross validation routine
+        cross_validate(dataset, model, loss_fn, training, args.k)
+    else:  # single split routine
+        ds_train, ds_val = dataset.split(split_ratio=[0.9, 0.1])
         logging.info('Initialising the model with the embedding layer frozen.')
         training(model, loss_fn, ds_train, ds_val)
         logging.info('--- Final statistics ---')
@@ -103,6 +108,7 @@ def main():
                      .format(*validate(ds_train, loss_fn, model)))
         logging.info('Validation loss : {:.4f}, accuracy {:.4f}'
                      .format(*validate(ds_val, loss_fn, model)))
+
         if not os.path.exists('models'):
             os.makedirs('models')
         logging.info('Model saved to: models/model_baseline.pt')
