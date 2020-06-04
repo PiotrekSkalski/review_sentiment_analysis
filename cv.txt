@@ -7,9 +7,9 @@
 06/02/2020 16:24:09 INFO : Training loss: 0.0742, accuracy : 0.977
 06/02/2020 16:24:09 INFO : Validation loss: 0.2899, accuracy : 0.897
 ---------- GRU self-attention ----------
-06/02/2020 16:39:28 INFO : --- Cross-validation statistics ---
-06/02/2020 16:39:28 INFO : Training loss: 0.0783, accuracy : 0.974
-06/02/2020 16:39:28 INFO : Validation loss: 0.2808, accuracy : 0.896
+06/04/2020 14:14:10 INFO : --- Cross-validation statistics ---
+06/04/2020 14:14:10 INFO : Training loss: 0.0858, accuracy : 0.972
+06/04/2020 14:14:10 INFO : Validation loss: 0.2793, accuracy : 0.894
 ---------- CNN horizontal ----------
 06/02/2020 16:50:39 INFO : --- Cross-validation statistics ---
 06/02/2020 16:50:39 INFO : Training loss: 0.1062, accuracy : 0.981

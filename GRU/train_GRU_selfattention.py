@@ -21,14 +21,19 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 class SelfAttention(nn.Module):
     def __init__(self, query_dim, n_outputs, dropout=0.1):
         super().__init__()
-        self.W1 = nn.Linear(query_dim, query_dim//2)
-        self.W2 = nn.Linear(query_dim//2, n_outputs)
+        self.W1 = nn.Linear(query_dim, query_dim//2, bias=False)
+        self.W2 = nn.Linear(query_dim//2, n_outputs, bias=False)
         self.softmax = nn.Softmax(dim=2)
         self.dropout = nn.Dropout(p=dropout)
 
-    def forward(self, query):
+    def forward(self, query, lengths):
         attn_weights = self.W2(self.dropout(torch.tanh(self.W1(query))))
         attn_weights = attn_weights.permute(0, 2, 1)
+
+        mask = torch.zeros_like(attn_weights, dtype=torch.bool)
+        for i, length in enumerate(lengths):
+            mask[i, :, length:] = True
+        attn_weights.masked_fill_(mask, -float('inf'))
 
         return self.softmax(attn_weights)
 
@@ -47,7 +52,8 @@ class GRU_SelfAttention_model(nn.Module):
         self.gru = nn.GRU(input_size=self.embed_dim, hidden_size=hidden_size,
                           num_layers=num_layers, dropout=dropout[0],
                           bidirectional=bidirectional, batch_first=True)
-        self.dropout = nn.Dropout(p=dropout[1])
+        self.dropout1 = nn.Dropout(p=dropout[1])
+        self.dropout2 = nn.Dropout(p=dropout[1])
         self.attention = SelfAttention(self.num_directions*self.hidden_size,
                                        self.attn_output_size, dropout[0])
         self.head = nn.Linear(self.attn_output_size*self.num_directions*self.hidden_size, 2)
@@ -56,7 +62,7 @@ class GRU_SelfAttention_model(nn.Module):
         batch, lengths = batch
         batch_dim, _ = batch.shape
 
-        embedded = self.dropout(self.embedding(batch))  # (B x E)
+        embedded = self.dropout1(self.embedding(batch))  # (B x E)
         embedded_packed = nn.utils.rnn.pack_padded_sequence(embedded, lengths, batch_first=True, enforce_sorted=False)
 
         outputs_packed, hiddens = self.gru(embedded_packed)
@@ -64,7 +70,7 @@ class GRU_SelfAttention_model(nn.Module):
         # outputs : (B x L x H)
         # hiddens : (L x B x H)
 
-        attn_weights = self.attention(self.dropout(outputs))  # (B x A x L)
+        attn_weights = self.attention(self.dropout2(outputs), lengths)  # (B x A x L)
         attn_output = torch.bmm(attn_weights, outputs).view(batch_dim, -1)  # (B x A x L) x (B x L x H) -> (B x A x H) -> (B x A*H)
 
         logging.debug('batch shape : {}'.format(batch.shape))
@@ -74,7 +80,7 @@ class GRU_SelfAttention_model(nn.Module):
         logging.debug('attn_weights shape : {}'.format(attn_weights.shape))
         logging.debug('attn_output shape : {}'.format(attn_output.shape))
 
-        return self.head(self.dropout(attn_output))
+        return self.head(self.dropout2(attn_output))
 
 
 def training(model, loss_fn, ds_train, ds_val):
