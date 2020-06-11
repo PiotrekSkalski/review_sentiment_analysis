@@ -1,9 +1,9 @@
 import copy
 import logging
 import os
-import re
 import wget
-import zipfile
+import tarfile
+import pickle
 from functools import partial
 from sklearn.model_selection import KFold
 import numpy as np
@@ -15,72 +15,90 @@ import torchtext.vocab as vocab
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-def get_dataset(glove_embedding_name='6B', dim=300):
+def get_dataset(min_freq=2, test_set=False):
     """
-        Downloads the dataset with 3000 reviews from IMDb, Yelp and Amazon
-        and returnd a torchtext.data.Dataset object and word vectors.
+        Downloads the IMDB dataset and returnd a torchtext.data.Dataset object
+        and word vectors. It contains 50,000 files so this function might take
+        a while if it's run for the first time.
 
         Args:
-            glove_embedding_name - str; it tells the size of the dataset that
-            the original word2vec model was trained on. Default is '6B'.
-
-            dim - int; dimension of the word embedding
-
-            ---> See the torchtext docs for a list of available pretrained
-            embeddings.
+            test_set - bool; Whether to return the test dataset; default=False.
 
         Returns:
             dataset - torchtext.data.Dataset object.
 
+            (dataset_test - torchtext.data.Dataset object; optional argument,
+            only if test_set=True)
+
             word_vectors - torch.tensor; It contains only those vectors
-            corresponding to words that appear in the dataset. Words that appear
-            in the dataset but not in the GloVe vocabulary are replaced by
-            the <unk> token, whose word vector is initialised from a normal
-            distribution. The <pad> token is added and its word vector is
-            initialised with zeros.
+            corresponding to words that appear in the train dataset more than
+            once.
     """
-    logging.info('Downloading data')
+
+    logging.info('----- IMDb dataset -----')
     if not os.path.exists('data'):
+        logging.info('Downloading data')
         os.makedirs('data')
-    if not os.listdir('data'):
-        wget.download('https://archive.ics.uci.edu/ml/machine-learning-databases/00331/sentiment labelled sentences.zip', out='data/data.zip')
-        with zipfile.ZipFile('data/data.zip', 'r') as myzip:
-            myzip.extractall('data/')
+        wget.download(
+            'https://ai.stanford.edu/~amaas/data/sentiment/aclImdb_v1.tar.gz',
+            out='data/aclImdb_v1.tar.gz'
+        )
+        logging.info('Untar data')
+        os.system('tar -C data/ -xzf {}'.format('data/aclImdb_v1.tar.gz'))
 
     # separate lines into reviews and class labels
-    path = os.path.abspath('data/sentiment labelled sentences')
-    regex = re.compile(r'^(.*?)\s+(\d)$')
-    reviews = []
-    for file in ['imdb_labelled.txt', 'amazon_cells_labelled.txt', 'yelp_labelled.txt']:
-        with open(os.path.join(path, file)) as f:
-            for line in f:
-                result = regex.match(line)
-                reviews.append([result.group(1), int(result.group(2))])
+    def process_set(set_path, pickle_name):
+        reviews = []
+        sets = {'pos/': 1, 'neg/': 0}
+        for folder, label in sets.items():
+            files = os.listdir(os.path.join(set_path, folder))
+            for file_name in files:
+                with open(os.path.join(set_path, folder, file_name)) as f:
+                    reviews.append([f.read(), label])
+        with open(os.path.join(set_path, pickle_name), 'wb') as f:
+            pickle.dump(reviews, f)
 
+    train_path = os.path.abspath('data/aclImdb/train/')
+    pickle_name_train = 'pickled_list_train.pkl'
+    if not os.path.exists(os.path.join(train_path, pickle_name_train)):
+        logging.info('Processing the training set')
+        process_set(train_path, pickle_name_train)
+
+    test_path = os.path.abspath('data/aclImdb/test/')
+    pickle_name_test = 'pickled_list_test.pkl'
+    if test_set and not os.path.exists(os.path.join(test_path, pickle_name_test)):
+        logging.info('Processing the test set')
+        process_set(test_path, pickle_name_test)
+
+    with open(os.path.join(train_path, pickle_name_train), 'rb') as f:
+        reviews = pickle.load(f)
+    if test_set:
+        with open(os.path.join(test_path, pickle_name_test), 'rb') as f:
+            reviews_test = pickle.load(f)
+
+    # build dataset
     TEXT = data.Field(tokenize='spacy', lower=True, batch_first=True)
     LABEL = data.Field(sequential=False, use_vocab=False)
     fields = [('review', TEXT), ('label', LABEL)]
 
-    logging.info('Downloading GloVe word vectors')
-    GLOVE = vocab.GloVe(name=glove_embedding_name, dim=dim)
-
-    # pipeline for replacing words that do not appear in GloVe vocab
-    def replace_unknown(x, word_list):
-        if x in word_list:
-            return x
-        else:
-            return '<unk>'
-
-    pipe = data.Pipeline(partial(replace_unknown, word_list=list(GLOVE.stoi.keys())))
-    TEXT.preprocessing = pipe
-
+    logging.info('Building training dataset')
     examples = [data.Example.fromlist(review, fields) for review in reviews]
     dataset = data.Dataset(examples, fields)
 
-    TEXT.build_vocab(dataset, vectors='glove.6B.{}d'.format(dim))
-    TEXT.vocab.vectors[0] = torch.normal(mean=TEXT.vocab.vectors.mean()*torch.ones(1, dim),  # <unk> token
-                                         std=TEXT.vocab.vectors.std()*torch.ones(1, dim))
-    TEXT.vocab.vectors[1] = torch.zeros(1, dim)  # <pad> token
+    logging.info('Building vocab')
+    GLOVE = vocab.GloVe('840B', 300)
+    unk_init = partial(torch.Tensor.normal_,
+                       mean=GLOVE.vectors.mean(),
+                       std=GLOVE.vectors.std())
+    GLOVE.unk_init = unk_init
+    TEXT.build_vocab(dataset, vectors=GLOVE, min_freq=min_freq)
+    TEXT.vocab.vectors[1] = torch.zeros((1, 300))  # pad token
+
+    if test_set:
+        logging.info('Building test dataset')
+        examples_test = [data.Example.fromlist(review, fields) for review in reviews_test]
+        dataset_test = data.Dataset(examples_test, fields)
+        return dataset, dataset_test, TEXT.vocab.vectors
 
     return dataset, TEXT.vocab.vectors
 
@@ -92,6 +110,9 @@ class MyIterator(data.Iterator):
         50*batch_size examples. Then sorts within each chunk and
         builds batches from these sorted examples. It then shuffles
         the batches and yields them.
+
+        Code adopted from
+        http://nlp.seas.harvard.edu/2018/04/03/attention.html#iterators
     """
     def create_batches(self):
         if self.train:
@@ -136,37 +157,3 @@ def validate(ds, loss_fn, model, bs=1, device=device):
         model.train()
 
     return avg_loss, accuracy
-
-
-def get_fold_data(ds, n_folds):
-    kf = KFold(n_splits=n_folds, shuffle=True)
-    examples = np.array(ds.examples)
-    fields = ds.fields
-    for train_index, val_index in kf.split(examples):
-        yield (data.Dataset(examples[train_index], fields=fields),
-               data.Dataset(examples[val_index], fields=fields))
-
-
-def cross_validate(dataset, model, loss_fn, training_fn, n_folds):
-    losses = {'train': [], 'val': []}
-    accuracies = {'train': [], 'val': []}
-    iterator = get_fold_data(dataset, n_folds)
-
-    for i, (ds_train, ds_val) in enumerate(iterator, 1):
-        logging.info('Cross-validating, fold : {}/{}'.format(i, n_folds))
-        logging.info('Initialising the model with the embedding layer frozen.')
-        fold_model = copy.deepcopy(model)
-        training_fn(fold_model, loss_fn, ds_train, ds_val)
-        
-        for ds, ds_id in zip([ds_train, ds_val], ['train', 'val']):
-            loss, acc = validate(ds, loss_fn, fold_model)
-            losses[ds_id].append(loss)
-            accuracies[ds_id].append(acc)
-            
-    logging.info('--- Cross-validation statistics ---')
-    logging.info('Training loss: {:.4f}, accuracy : {:.3f}'
-                 .format(sum(losses['train'])/n_folds,
-                         sum(accuracies['train'])/n_folds))
-    logging.info('Validation loss: {:.4f}, accuracy : {:.3f}'
-                 .format(sum(losses['val'])/n_folds,
-                         sum(accuracies['val'])/n_folds))

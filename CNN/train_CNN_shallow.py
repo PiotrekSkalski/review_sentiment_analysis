@@ -6,7 +6,6 @@ sys.path.append(path)
 
 import logging
 import argparse
-import os
 import random
 import torch
 import torch.nn as nn
@@ -19,53 +18,42 @@ from schedulers import CyclicLRDecay
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-class GRUConcatPool(nn.Module):
-    def __init__(self, embed_vecs=None, hidden_size=512, dropout=(0, 0, 0)):
+class CNN(nn.Module):
+    def __init__(self, emb_weights, out_channels=100, kernel_heights=(3, 5, 7), dropout=(0, 0)):
         super().__init__()
-        self.hidden_size = hidden_size
-        self.embedding = nn.Embedding.from_pretrained(embed_vecs)
 
-        self.gru = nn.GRU(input_size=embed_vecs.size()[1], hidden_size=hidden_size,
-                          num_layers=1, bidirectional=True, batch_first=True)
+        self.embedding = nn.Embedding.from_pretrained(emb_weights)
+        convolutions = []
+        emb_dim = emb_weights.shape[1]
+        for kernel in kernel_heights:
+            padding = (kernel - 1) // 2
+            convolutions.append(nn.Conv1d(emb_dim, out_channels, kernel, padding=padding))
+        self.convolutions = nn.ModuleList(convolutions)
         self.emb_dropout = nn.Dropout(p=dropout[0])
-        self.dropout = nn.Dropout(p=dropout[1])
+        self.relu = nn.ReLU()
         self.head = nn.Sequential(
-            nn.Linear(4*self.hidden_size, 2*self.hidden_size),
-            nn.Dropout(p=dropout[2]),
+            nn.Linear(len(kernel_heights)*out_channels, len(kernel_heights)*out_channels//2),
+            nn.Dropout(p=dropout[1]),
             nn.ReLU(),
-            nn.Linear(2*self.hidden_size, 2)
+            nn.Linear(len(kernel_heights)*out_channels//2, 2)
         )
 
     def forward(self, batch):
         batch, lengths = batch
-        batch_dim, _ = batch.shape
 
-        embedded = self.emb_dropout(self.embedding(batch))
-        embedded_packed = nn.utils.rnn.pack_padded_sequence(embedded, lengths, batch_first=True, enforce_sorted=False)
+        embedded = self.emb_dropout(self.embedding(batch)) # B x L x E
+        embedded = embedded.transpose(1, 2) # B x E x L
+        max_out = [self.conv_block(embedded, self.convolutions[i]) for i in range(len(self.convolutions))]
+        cat_out = torch.cat(max_out, dim=1) # B x C*K
 
-        outputs_packed, hiddens = self.gru(embedded_packed)
-        outputs, lengths = nn.utils.rnn.pad_packed_sequence(outputs_packed, batch_first=True)
-        outputs = self.dropout(outputs) # B x L x 2H
+        return self.head(cat_out)
 
-        avg_pool = torch.sum(outputs, dim=1)/lengths.unsqueeze(1).to(device) # B x 2H
-
-        # masking
-        mask = torch.zeros_like(outputs, dtype=torch.bool)
-        for i, length in enumerate(lengths):
-            mask[i, length:, :] = True
-        outputs.masked_fill_(mask, -float('inf')) # B x L x 2H
-        max_pool = torch.max(outputs, dim=1)[0] # B x 2H
-
-        cat_output = torch.cat([avg_pool, max_pool], dim=1) # B x 6H
-
-        logging.debug('batch shape : {}'.format(batch.shape))
-        logging.debug('embedding shape : {}'.format(embedded.shape))
-        logging.debug('hiddens shape : {}'.format(hiddens.shape))
-        logging.debug('outputs shape : {}'.format(outputs.shape))
-        logging.debug('avg_pool shape : {}'.format(avg_pool.shape))
-        logging.debug('max_pool shape : {}'.format(max_pool.shape))
-
-        return self.head(cat_output)
+    def conv_block(self, input, conv_layer):
+        # think about adding masking before max
+        output = conv_layer(input)
+        output = self.relu(output)
+        output = torch.max(output, dim=2)[0]
+        return output
 
 
 def main():
@@ -100,20 +88,20 @@ def main():
 
     bs = 64
     logging.info('Initialising the model with the embedding layer frozen.')
-    model = GRUConcatPool(emb_weights.clone(), hidden_size=512,
-                          dropout=(0.65, 0.65, 0.65)).to(device)
+    model = CNN(emb_weights.clone(), out_channels=128,
+                kernel_heights=(1, 3, 5), dropout=(0.55, 0.5)).to(device)
     loss_fn = nn.CrossEntropyLoss().to(device)
     optimiser = AdamW(model.parameters(), weight_decay=1e-3)
     cycle_steps = (len(ds_train)//bs + 1)
-    scheduler = CyclicLRDecay(optimiser, 5e-5, 4e-3, cycle_steps, 0.1, gamma_factor=0.75)
+    scheduler = CyclicLRDecay(optimiser, 6e-5, 3e-3, cycle_steps, 0.1, gamma_factor=0.7)
     learner = Learner(model, loss_fn, optimiser, scheduler, ds_train, ds_val, device)
 
     logging.info('Training')
-    learner.train(epochs=2, bs=bs, grad_clip=(0.4, 5))
+    learner.train(epochs=2, bs=bs, grad_clip=(0.5, 2))
 
     logging.info('Unfreezing the embedding layer')
     model.embedding.weight.requires_grad_(True)
-    learner.train(epochs=6, bs=bs, grad_clip=(0.4, 5))
+    learner.train(epochs=8, bs=bs, grad_clip=(0.5, 2))
 
     logging.info('--- Final statistics ---')
     logging.info('Training loss : {:.4f}, accuracy {:.4f}'

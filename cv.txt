@@ -1,7 +1,10 @@
 ---------- Baseline model ----------
-06/02/2020 15:40:18 INFO : --- Cross-validation statistics ---
-06/02/2020 15:40:18 INFO : Training loss: 0.0566, accuracy : 0.986
-06/02/2020 15:40:18 INFO : Validation loss: 0.4189, accuracy : 0.857
+06/06/2020 17:37:34 INFO : --- Cross-validation statistics ---
+06/06/2020 17:37:34 INFO : Training loss: 0.0881, accuracy : 0.983
+06/06/2020 17:37:34 INFO : Validation loss: 0.2487, accuracy : 0.901
+
+
+
 ---------- GRU concatpool ----------
 06/02/2020 16:24:09 INFO : --- Cross-validation statistics ---
 06/02/2020 16:24:09 INFO : Training loss: 0.0742, accuracy : 0.977

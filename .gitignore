@@ -9,3 +9,4 @@ gru_experimenting.ipynb
 models/
 .vscode/settings.json
 get_dataset_bert.py
+BERT/
