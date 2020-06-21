@@ -17,11 +17,14 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def get_dataset(min_freq=2, test_set=False):
     """
-        Downloads the IMDB dataset and returnd a torchtext.data.Dataset object
+        Downloads the IMDB dataset and returns a torchtext.data.Dataset object
         and word vectors. It contains 50,000 files so this function might take
         a while if it's run for the first time.
 
         Args:
+            min_freq - int; only words with frequency above min_freq are
+            included in the vocabulary.
+
             test_set - bool; Whether to return the test dataset; default=False.
 
         Returns:
@@ -30,9 +33,8 @@ def get_dataset(min_freq=2, test_set=False):
             (dataset_test - torchtext.data.Dataset object; optional argument,
             only if test_set=True)
 
-            word_vectors - torch.tensor; It contains only those vectors
-            corresponding to words that appear in the train dataset more than
-            once.
+            word_vectors - torch.tensor; pretrained GloVe word vectors aligned
+            with the vocabulary; from 'glove.840B.300d'.
     """
 
     logging.info('----- IMDb dataset -----')

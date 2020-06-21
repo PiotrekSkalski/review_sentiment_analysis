@@ -21,20 +21,23 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 class Baseline_model(nn.Module):
     """
         Basic baseline model based on a bag of embeddings.
-
-        Args:
-            vocab_size - int; size of the dataset vocabulary .
-            embed_dim - int; size of the embedding vectors.
-            embed_vecs - tensor; pretrained word embeddings (optional).
     """
 
     def __init__(self, embed_vecs):
+        """
+            Args:
+                embed_vecs - tensor; pretrained word embeddings.
+        """
         super().__init__()
         self.embed_dim = embed_vecs.shape[1]
         self.embedding = nn.EmbeddingBag.from_pretrained(embed_vecs)
         self.head = nn.Linear(self.embed_dim, 2)
 
     def forward(self, batch):
+        """
+            Args:
+                batch - tuple: (batch, lengths);
+        """
         batch, lengths = batch
 
         trimmed_reviews = [review[:length] for review, length in zip(batch, lengths)]
@@ -60,7 +63,7 @@ def main():
                         default=None,
                         help='random seed')
     parser.add_argument('--save-to',
-                        type=str,
+                        type=str,C>
                         default=None,
                         help='name of a file to save')
     args = parser.parse_args()

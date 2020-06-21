@@ -15,9 +15,24 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 class Learner:
     """
+        Learner - an extended training loop
+
+        The Learner class encompasses a training loop and a learning
+        rate finder utility. It also contains a Recorder object that
+        records losses, learning rates and gradients during training.
     """
+
     def __init__(self, model, loss_fn, optim, lr_sched,
                  ds_train, ds_val=None, device=device):
+        """
+            Args:
+                model - nn.Module; a model to be trained
+                loss_fn - nn.Module; loss function
+                lr_sched - learning rate scheduler
+                ds_train, ds_val - training and validation sets, objects
+                of the torchtext.data.Dataset class
+                device - torch.device object
+        """
         self.model = model
         self.loss_fn = loss_fn
         self.optim = optim
@@ -31,15 +46,17 @@ class Learner:
     def train(self, epochs=1, bs=8, lr=None, grad_clip=None,
               silent=False, no_logs_per_epoch=4):
         """
-            A basic training loop that logs some training statistics,
-            like losses and accuracy.
+            A basic training loop that logs losses, learning rates and gradients.
 
             Args:
                 epochs - int; default=1.
                 bs - int; batch_size, default=4.
+                lr - float; value of learing rate that overrides optim.param_groups[0]['lr'],
+                if None, then no overriding happens, default=None
                 grad_clip - float; maximum value for a gradient clipping method,
-                            default=none, i.e. no grad clipping.
-
+                default=none, i.e. no grad clipping.
+                silent - bool; if True, then logging is switched off; default=False.
+                no_logs_per_epoch - int; runs validation every len(train_dataset)//no_logs_per_epoch
         """
         start_time = time.time()
         no_batches = math.ceil(len(self.ds_train)/bs)
@@ -108,6 +125,26 @@ class Learner:
 
     def lr_finder(self, bs=32, lr_range=(1e-6, 1e0),
                   no_points='auto', beta=0.7, early_stop=True):
+        """
+            A utility that helps choose a lr before training.
+
+            It runs the training and increases the lr on a logarithmic scale
+            between the lr_range values. It records the the exponential moving
+            average of the training loss and in the end plots it vs. the
+            learning rate. The model weights are recover to the exact ones
+            before running this utility.
+
+            Args:
+                bs - int; batch size; default=32
+                lr_range - (float, float); lower and upper bounds of the
+                learning rate; default=(1e-6, 1e0).
+                no_points - int or 'auto'; number of training iterations;
+                default='auto'.
+                beta - float; a parameter of the exponential moving average;
+                the higher this value, the higher the degree of smoothing.
+                early_stop - bool; whether to stop the function if the loss
+                explodes; default=True.
+        """
         initial_state_dict = copy.deepcopy(self.model.state_dict())
         initial_lr = self.optim.param_groups[0]['lr']
         self.optim.param_groups[0]['lr'] = lr_range[0]
@@ -157,16 +194,42 @@ class Learner:
 
 class Recorder(dict):
     """
+        Records losses, learning rates and gradients during training.
     """
     def __init__(self, **kwargs):
+        """
+            Initialises the dictionary with empty lists for:
+            - train_loss
+            - val_loss
+            - vall_loss_batch
+            - lr
+            - grad_max
+            - grad_norm
+        """
         super().__init__(train_loss=[], val_loss=[], val_loss_batch=[],
                          lr=[], grad_max=[], grad_norm=[], **kwargs)
 
     def record(self, **kwargs):
+        """
+            Appends to the lists specified by the **kwargs.
+            ! Those lists must already exist !
+        """
         for key, value in kwargs.items():
             self[key].append(value)
 
     def plot_losses(self, show_lr=False, raw=True, gauss_avg=True, sigma=20):
+        """
+            Plots the losses, and optionally the learning rates, recorded
+            during training.
+
+            Args:
+                show_lr - bool; whether to show a plot of learning rates.
+                raw - bool; whether to show the original training losses.
+                gauss_avg - bool; whether to show a gaussian average of the
+                raw training loss.
+                sigma - float; a parameter for the gaussian averaging function
+                that specifies the degree of smoothing; default=20.
+        """
         plt.figure(figsize=(8, 6))
 
         if raw:
@@ -191,6 +254,10 @@ class Recorder(dict):
             plt.show()
 
     def plot_grads(self):
+        """
+            Plots the gradient recorded during training. Useful for
+            setting the gradient clipping value.
+        """
         plt.figure(figsize=(8, 6))
         plt.plot(self['grad_max'])
         plt.ylabel('max gradient')
@@ -201,6 +268,9 @@ class Recorder(dict):
         plt.show()
 
     def reset(self):
+        """
+            Reinitialises the Recorder.
+        """
         self.__init__()
 
 

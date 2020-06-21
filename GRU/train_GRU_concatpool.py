@@ -20,7 +20,19 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 class GRUConcatPool(nn.Module):
+    """
+        A bidirectional GRU with single layer and a concalpool layer.
+        The head is a FCNN with two linear layers.
+    """
     def __init__(self, embed_vecs=None, hidden_size=512, dropout=(0, 0, 0)):
+        """
+            Args:
+                embed_vecs - tensor; pretrained embedding vectors.
+                hidden_size - int; hidden size of the GRU module.
+                dropout - tuple(float, float, float); dropout applied after
+                the embedding layer, GRU layer and between the linear layers
+                in the head.
+        """
         super().__init__()
         self.hidden_size = hidden_size
         self.embedding = nn.Embedding.from_pretrained(embed_vecs)
@@ -37,6 +49,10 @@ class GRUConcatPool(nn.Module):
         )
 
     def forward(self, batch):
+        """
+            Args:
+                batch - tuple(batch, lengths);
+        """
         batch, lengths = batch
         batch_dim, _ = batch.shape
 

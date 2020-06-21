@@ -19,6 +19,9 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 class CNN(nn.Module):
+    """
+        A shallow CNN network.
+    """
     def __init__(self, emb_weights, out_channels=100, kernel_heights=(3, 5, 7), dropout=(0, 0)):
         super().__init__()
 
@@ -36,7 +39,7 @@ class CNN(nn.Module):
             nn.Dropout(p=dropout[1]),
             nn.ReLU(),
             nn.Linear(len(kernel_heights)*out_channels//2, 2)
-        )
+            )
 
     def forward(self, batch):
         batch, lengths = batch

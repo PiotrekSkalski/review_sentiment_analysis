@@ -19,7 +19,15 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 class SelfAttention(nn.Module):
+    """
+        A self attention module.
+    """
     def __init__(self, query_dim, n_outputs):
+        """
+            Args:
+                query_dim - int; dimension of the hidden layer of GRU module
+                n_output - int; number of attention outputs.
+        """
         super().__init__()
         self.W1 = nn.Linear(query_dim, query_dim//2, bias=False)
         self.W2 = nn.Linear(query_dim//2, n_outputs, bias=False)
@@ -29,6 +37,7 @@ class SelfAttention(nn.Module):
         attn_weights = self.W2(torch.tanh(self.W1(query)))
         attn_weights = attn_weights.permute(0, 2, 1)
 
+        # masking the padding tokens
         mask = torch.zeros_like(attn_weights, dtype=torch.bool)
         for i, length in enumerate(lengths):
             mask[i, :, length:] = True
@@ -38,7 +47,20 @@ class SelfAttention(nn.Module):
 
 
 class GRUSelfAttention(nn.Module):
+    """
+        A bidirectional GRU with self attention on top and a FCNN head
+        with two Linear layers.
+    """
     def __init__(self, embed_vecs=None, hidden_size=256, attn_output_size=8, dropout=(0, 0, 0)):
+        """
+            Args:
+                embed_vecs - tensor; pretrained embedding vectors.
+                hidden_size - int; dimension of the GRU hidden layers.
+                attn_output_size - int; number of attention outputs.
+                dropout - tuple(float, float, float); attention applied
+                after the the embedding, after GRU and between the linear
+                layers in the head.
+        """
         super().__init__()
         self.hidden_size = hidden_size
         self.attn_output_size = attn_output_size
@@ -56,6 +78,10 @@ class GRUSelfAttention(nn.Module):
             nn.Linear(self.attn_output_size*self.hidden_size, 2))
 
     def forward(self, batch):
+        """
+            Args:
+                batch - tuple(batch, lengths);
+        """
         batch, lengths = batch
         batch_dim, _ = batch.shape
 
@@ -80,6 +106,9 @@ class GRUSelfAttention(nn.Module):
 
 
 class Hook():
+    """
+        Registers a forward hook in a specified module.
+    """
     def __init__(self, module):
         self.hook = module.register_forward_hook(self.hook_fn)
     def hook_fn(self, module, input, output):
@@ -87,7 +116,18 @@ class Hook():
 
 
 class CrossEntropyWP(nn.Module):
+    """
+        A loss function which combines cross entropy loss and
+        a penalty term to reduce redundancy among the attention
+        outputs.
+    """
     def __init__(self, attn_size, hook, penalty=0):
+        """
+            Args:
+                attn_size - int; number of attention outputs.
+                hook - Hook; a forward hook attached to the self attention layer.
+                penalty - float; a multiplicative factor for the penalty term.
+        """
         super().__init__()
         self.crossentropy = nn.CrossEntropyLoss()
         self.eye = torch.eye(attn_size).to(device)

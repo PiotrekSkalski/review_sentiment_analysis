@@ -19,6 +19,9 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 class ResBlock(nn.Module):
+    """
+        A residual block with skip connections.
+    """
   def __init__(self, in_channels, out_channels, kernel=3,
                pool=False, skip=True, dropout=0):
     super().__init__()
@@ -66,6 +69,9 @@ class ResBlock(nn.Module):
 
 
 class DCNN(nn.Module):
+    """
+        A deep CNN network made of residual blocks.
+    """N?
   def __init__(self, emb_weights, in_channels, dropout=(0, 0, 0)):
     super().__init__()
 
